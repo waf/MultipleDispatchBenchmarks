@@ -66,5 +66,12 @@ namespace DispatchBenchmark.Tests
             var results = this.benchmark.VisitorDispatch();
             Assert.Equal(expected, results);
         }
+
+        [Fact]
+        public void DoubleDispatchObject_CorrectlyDispatches()
+        {
+            var results = this.benchmark.DoubleDispatch();
+            Assert.Equal(expected, results);
+        }
     }
 }

@@ -8,6 +8,8 @@ namespace DispatchBenchmark
         static void Main(string[] args)
         {
             var summary = BenchmarkRunner.Run<DispatchBenchmark>();
+            Console.WriteLine("Press a key");
+            Console.ReadKey();
         }
     }
 }
