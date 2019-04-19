@@ -1,20 +1,18 @@
 ﻿using BenchmarkDotNet.Attributes;
 using System;
-using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace DispatchBenchmark
 {
     using YSharp.Design.DoubleDispatch;
+    using YSharp.Design.DoubleDispatch.Extensions;
 
     public partial class DispatchBenchmark
     {
         private DoubleDispatchObject dispatch;
 
         public string Describe(Shape shape) =>
-            (dispatch = dispatch ?? new DoubleDispatchObject(this))
+            this.ThreadSafe(ref dispatch)
             .Via(Describe, shape, () => throw new Exception("Unexpected shape"));
 
         [Benchmark]
