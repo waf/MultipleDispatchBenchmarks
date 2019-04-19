@@ -28,12 +28,21 @@ namespace DispatchBenchmark.Tests
         {
             protected readonly StringBuilder accumulator = new StringBuilder();
 
+            public string Foo(int a) => "";
+
             public override string ToString() =>
                 accumulator.ToString();
 
             public virtual void Handle(POCOEntity entity)
             {
                 // No-op
+            }
+
+            // Ignored, unless statically bound at some call site somewhere, or
+            // indirectly dispatched-to via a surrogate of a delegate bound to "this"
+            public virtual void Handle(POCOFile file)
+            {
+                accumulator.AppendLine($"item: {file}");
             }
         }
 
@@ -51,7 +60,7 @@ namespace DispatchBenchmark.Tests
                     }
                 );
 
-            public void Handle(POCOFile file)
+            public override void Handle(POCOFile file)
             {
                 accumulator.AppendLine($"item: {file}");
             }
@@ -195,6 +204,44 @@ namespace DispatchBenchmark.Tests
                     "folder: POCOFolder(folder1)",
                     "item: POCOFile(file2)",
                     "folder: POCOFolder(folder2)"
+                },
+                lines.ToArray()
+            );
+        }
+
+        [Fact]
+        public void DoubleDispatchObject_SurrogateCanCorrectlyDispatchOverPOCOServiceBase()
+        {
+            var service = new POCOServiceBase();
+            var/*(Action<Shape>)*/ surrogate = DoubleDispatchObject.CreateSurrogate(service.Handle, default(POCOEntity));
+
+            POCOEntity entity = new POCOFile("file1");
+            surrogate.Invoke(entity);
+            entity = new POCOLink("link1");
+            surrogate.Invoke(entity);
+            entity = new POCOFolder("folder1");
+            surrogate.Invoke(entity);
+            entity = new POCOFile("file2");
+            surrogate.Invoke(entity);
+            entity = new POCOFolder("folder2");
+            surrogate.Invoke(entity);
+
+            var serviceText = service.ToString();
+            var reader = new StringReader(serviceText);
+            var lines = new List<string>();
+            string line;
+            while ((line = reader.ReadLine()) != null)
+            {
+                lines.Add(line);
+            }
+
+            Assert.Equal(2, lines.Count);
+            Assert.Equal
+            (
+                new string[]
+                {
+                    "item: POCOFile(file1)",
+                    "item: POCOFile(file2)"
                 },
                 lines.ToArray()
             );

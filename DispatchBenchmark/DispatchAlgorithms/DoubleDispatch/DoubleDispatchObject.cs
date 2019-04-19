@@ -125,6 +125,41 @@ namespace YSharp.Design.DoubleDispatch
             );
         }
 
+        //TODO: more unit tests
+        public static Action<T> CreateSurrogate<T>(Action<T> action, T prototype) =>
+            CreateSurrogate(action, prototype, null);
+
+        public static Action<T> CreateSurrogate<T>(Action<T> action, T prototype, Action orElse)
+        {
+            action = action ?? throw new ArgumentNullException(nameof(action), "cannot be null");
+            var target = action.Target ?? throw new ArgumentException("must be bound", nameof(action));
+            var dispatch = new DoubleDispatchObject(target);
+            Action<T> surrogate =
+                arg =>
+                    dispatch.Via(action, arg, orElse);
+            return surrogate;
+        }
+
+        public static Func<T, TResult> CreateSurrogate<T, TResult>(Func<T, TResult> function, T prototype) =>
+            CreateSurrogate(function, prototype, null, default(TResult));
+
+        public static Func<T, TResult> CreateSurrogate<T, TResult>(Func<T, TResult> function, T prototype, Func<TResult> orElse) =>
+            CreateSurrogate(function, prototype, orElse, default(TResult));
+
+        public static Func<T, TResult> CreateSurrogate<T, TResult>(Func<T, TResult> function, T prototype, TResult defaultResult) =>
+            CreateSurrogate(function, prototype, null, defaultResult);
+
+        public static Func<T, TResult> CreateSurrogate<T, TResult>(Func<T, TResult> function, T prototype, Func<TResult> orElse, TResult defaultResult)
+        {
+            function = function ?? throw new ArgumentNullException(nameof(function), "cannot be null");
+            var target = function.Target ?? throw new ArgumentException("must be bound", nameof(function));
+            var dispatch = new DoubleDispatchObject(target);
+            Func<T, TResult> surrogate =
+                arg =>
+                    dispatch.Via(function, arg, orElse, defaultResult);
+            return surrogate;
+        }
+
         public DoubleDispatchObject() : this(null) { }
 
         public DoubleDispatchObject(object target)
