@@ -28,8 +28,6 @@ namespace DispatchBenchmark.Tests
         {
             protected readonly StringBuilder accumulator = new StringBuilder();
 
-            public string Foo(int a) => "";
-
             public override string ToString() =>
                 accumulator.ToString();
 
@@ -213,7 +211,7 @@ namespace DispatchBenchmark.Tests
         public void DoubleDispatchObject_SurrogateCanCorrectlyDispatchOverPOCOServiceBase()
         {
             var service = new POCOServiceBase();
-            var/*(Action<Shape>)*/ surrogate = DoubleDispatchObject.CreateSurrogate(service.Handle, default(POCOEntity));
+            var/*(Action<POCOEntity>)*/ surrogate = DoubleDispatchObject.CreateSurrogate(service.Handle, default(POCOEntity));
 
             POCOEntity entity = new POCOFile("file1");
             surrogate.Invoke(entity);

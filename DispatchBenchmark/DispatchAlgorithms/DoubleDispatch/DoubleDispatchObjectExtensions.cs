@@ -7,7 +7,7 @@ namespace YSharp.Design.DoubleDispatch.Extensions
         public static DoubleDispatchObject ThreadSafe<T>(this T target, ref DoubleDispatchObject site)
             where T : class
         {
-            target = target ?? throw new ArgumentNullException(nameof(target), "cannot be null");
+            target = target ?? throw new ArgumentNullException(nameof(target));
             var dispatch = site;
             if (dispatch == null)
             {

@@ -131,7 +131,7 @@ namespace YSharp.Design.DoubleDispatch
 
         public static Action<T> CreateSurrogate<T>(Action<T> action, T prototype, Action orElse)
         {
-            action = action ?? throw new ArgumentNullException(nameof(action), "cannot be null");
+            action = action ?? throw new ArgumentNullException(nameof(action));
             var target = action.Target ?? throw new ArgumentException("must be bound", nameof(action));
             var dispatch = new DoubleDispatchObject(target);
             Action<T> surrogate =
@@ -151,7 +151,7 @@ namespace YSharp.Design.DoubleDispatch
 
         public static Func<T, TResult> CreateSurrogate<T, TResult>(Func<T, TResult> function, T prototype, Func<TResult> orElse, TResult defaultResult)
         {
-            function = function ?? throw new ArgumentNullException(nameof(function), "cannot be null");
+            function = function ?? throw new ArgumentNullException(nameof(function));
             var target = function.Target ?? throw new ArgumentException("must be bound", nameof(function));
             var dispatch = new DoubleDispatchObject(target);
             Func<T, TResult> surrogate =
