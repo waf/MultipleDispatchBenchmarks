@@ -126,9 +126,15 @@ namespace YSharp.Design.DoubleDispatch
         }
 
         //TODO: more unit tests
+        /// <summary>
+        /// Creates a surrogate of the action delegate, which enables double dispatch in the concrete type of its target
+        /// </summary>
         public static Action<T> CreateSurrogate<T>(Action<T> action, T prototype) =>
             CreateSurrogate(action, prototype, null);
 
+        /// <summary>
+        /// Creates a surrogate of the action delegate, which enables double dispatch in the concrete type of its target
+        /// </summary>
         public static Action<T> CreateSurrogate<T>(Action<T> action, T prototype, Action orElse)
         {
             action = action ?? throw new ArgumentNullException(nameof(action));
@@ -140,15 +146,27 @@ namespace YSharp.Design.DoubleDispatch
             return surrogate;
         }
 
+        /// <summary>
+        /// Creates a surrogate of the function delegate, which enables double dispatch in the concrete type of its target
+        /// </summary>
         public static Func<T, TResult> CreateSurrogate<T, TResult>(Func<T, TResult> function, T prototype) =>
             CreateSurrogate(function, prototype, null, default(TResult));
 
+        /// <summary>
+        /// Creates a surrogate of the function delegate, which enables double dispatch in the concrete type of its target
+        /// </summary>
         public static Func<T, TResult> CreateSurrogate<T, TResult>(Func<T, TResult> function, T prototype, Func<TResult> orElse) =>
             CreateSurrogate(function, prototype, orElse, default(TResult));
 
+        /// <summary>
+        /// Creates a surrogate of the function delegate, which enables double dispatch in the concrete type of its target
+        /// </summary>
         public static Func<T, TResult> CreateSurrogate<T, TResult>(Func<T, TResult> function, T prototype, TResult defaultResult) =>
             CreateSurrogate(function, prototype, null, defaultResult);
 
+        /// <summary>
+        /// Creates a surrogate of the function delegate, which enables double dispatch in the concrete type of its target
+        /// </summary>
         public static Func<T, TResult> CreateSurrogate<T, TResult>(Func<T, TResult> function, T prototype, Func<TResult> orElse, TResult defaultResult)
         {
             function = function ?? throw new ArgumentNullException(nameof(function));

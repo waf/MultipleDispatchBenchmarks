@@ -218,16 +218,16 @@ namespace DispatchBenchmark.Tests
             // Equivalent to:
             // Action<POCOEntity> surrogate = DoubleDispatchObject.CreateSurrogate(service.Handle, default(POCOEntity));
             // surrogate.Invoke(entity);
-            service.Surrogate(service.Handle, entity);
+            service.SurrogateInvoke(service.Handle, entity);
 
             entity = new POCOLink("link1");
-            service.Surrogate(service.Handle, entity);
+            service.SurrogateInvoke(service.Handle, entity);
             entity = new POCOFolder("folder1");
-            service.Surrogate(service.Handle, entity);
+            service.SurrogateInvoke(service.Handle, entity);
             entity = new POCOFile("file2");
-            service.Surrogate(service.Handle, entity);
+            service.SurrogateInvoke(service.Handle, entity);
             entity = new POCOFolder("folder2");
-            service.Surrogate(service.Handle, entity);
+            service.SurrogateInvoke(service.Handle, entity);
 
             var serviceText = service.ToString();
             var reader = new StringReader(serviceText);
