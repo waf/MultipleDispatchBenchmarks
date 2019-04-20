@@ -7,6 +7,7 @@ using Xunit;
 namespace DispatchBenchmark.Tests
 {
     using YSharp.Design.DoubleDispatch;
+    using YSharp.Design.DoubleDispatch.Extensions;
 
     public class DoubleDispatchUnitTest
     {
@@ -211,18 +212,22 @@ namespace DispatchBenchmark.Tests
         public void DoubleDispatchObject_SurrogateCanCorrectlyDispatchOverPOCOServiceBase()
         {
             var service = new POCOServiceBase();
-            var/*(Action<POCOEntity>)*/ surrogate = DoubleDispatchObject.CreateSurrogate(service.Handle, default(POCOEntity));
 
             POCOEntity entity = new POCOFile("file1");
-            surrogate.Invoke(entity);
+
+            // Equivalent to:
+            // Action<POCOEntity> surrogate = DoubleDispatchObject.CreateSurrogate(service.Handle, default(POCOEntity));
+            // surrogate.Invoke(entity);
+            service.Surrogate(service.Handle, entity);
+
             entity = new POCOLink("link1");
-            surrogate.Invoke(entity);
+            service.Surrogate(service.Handle, entity);
             entity = new POCOFolder("folder1");
-            surrogate.Invoke(entity);
+            service.Surrogate(service.Handle, entity);
             entity = new POCOFile("file2");
-            surrogate.Invoke(entity);
+            service.Surrogate(service.Handle, entity);
             entity = new POCOFolder("folder2");
-            surrogate.Invoke(entity);
+            service.Surrogate(service.Handle, entity);
 
             var serviceText = service.ToString();
             var reader = new StringReader(serviceText);
