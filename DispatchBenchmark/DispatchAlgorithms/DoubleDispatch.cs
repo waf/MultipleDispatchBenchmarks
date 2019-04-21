@@ -13,7 +13,7 @@ namespace DispatchBenchmark
 
         public string Describe(Shape shape) =>
             this.EnsureThreadSafe(ref dispatchObject)
-            .Via(Describe, shape, () => throw new Exception("Unexpected shape"));
+            .Via(nameof(Describe), shape, () => default(string) ?? throw new Exception("Unexpected shape"));
 
         [Benchmark]
         public string[] DoubleDispatch()

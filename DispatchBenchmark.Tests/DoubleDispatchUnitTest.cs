@@ -52,7 +52,7 @@ namespace DispatchBenchmark.Tests
 
             public override void Handle(POCOEntity entity) =>
                 this.EnsureThreadSafe(ref dispatchObject)
-                .Via(Handle, entity,
+                .Via(nameof(Handle), entity,
                     () =>
                     {
                         accumulator.AppendLine($"unsupported entity: {(entity != null ? entity.ToString() : "<null>")}");
@@ -84,7 +84,7 @@ namespace DispatchBenchmark.Tests
                 accumulator.ToString();
 
             public void Handle(POCOEntity entity) =>
-                Via(Handle, entity,
+                Via(nameof(Handle), entity,
                     () =>
                     {
                         accumulator.AppendLine($"unsupported entity: {(entity != null ? entity.ToString() : "<null>")}");

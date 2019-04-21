@@ -95,41 +95,46 @@ namespace YSharp.Design.DoubleDispatch
 
     public class DoubleDispatchObject
     {
-        private readonly IDictionary<Type, Tuple<Action<object>, Type>> _action1 = new Dictionary<Type, Tuple<Action<object>, Type>>();
-        private readonly IDictionary<Type, Tuple<Func<object, object>, Type>> _function1 = new Dictionary<Type, Tuple<Func<object, object>, Type>>();
+        private readonly IDictionary<string, IDictionary<Type, Tuple<Action<object>, Type>>> _action1 = new Dictionary<string, IDictionary<Type, Tuple<Action<object>, Type>>>();
+        private readonly IDictionary<string, IDictionary<Type, Tuple<Func<object, object>, Type>>> _function1 = new Dictionary<string, IDictionary<Type, Tuple<Func<object, object>, Type>>>();
 
-        private void PopulateBoundTypeMap<TBound>(IDictionary<Type, Tuple<TBound, Type>> boundTypeMap, bool forFunctionType)
+        private void PopulateBoundTypeMap<TBound>(IDictionary<string, IDictionary<Type, Tuple<TBound, Type>>> boundMultimethodMap, bool forFunctionType)
         {
-            var parameterCount = typeof(TBound).GetGenericArguments().Length - (forFunctionType ? 1 : 0);
-            Target
-            .GetType()
-            .GetMethods(BindingFlags.Public | BindingFlags.Instance)
-            .Where
-            (
-                m =>
-                    (forFunctionType ? m.ReturnType != typeof(void) : m.ReturnType == typeof(void)) &&
-                    m.GetParameters().Length == parameterCount &&
-                    !m.GetParameters().Any(p => p.ParameterType.ContainsGenericParameters)
-            )
+            ParameterInfo[] parameters;
+            var methods =
+                Target
+                .GetType()
+                .GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                .Where
+                (
+                    m =>
+                        (forFunctionType ? m.ReturnType != typeof(void) : m.ReturnType == typeof(void)) &&
+                        (parameters = m.GetParameters()).Length == 1 &&
+                        !parameters[0].ParameterType.ContainsGenericParameters &&
+                        !
+                        (
+                            (m.Name == "Equals") &&
+                            (parameters[0].ParameterType == typeof(object)) &&
+                            (m.ReturnType == typeof(bool))
+                        )
+                )
+                .ToArray();
+            methods
             .Aggregate
             (
-                boundTypeMap,
+                boundMultimethodMap,
                 (map, method) =>
                 {
-                    var parameterTypes = method.GetParameters().Select(p => p.ParameterType).ToArray();
+                    var parameterType = method.GetParameters()[0].ParameterType;
                     var returnType = method.ReturnType != typeof(void) ? method.ReturnType : null;
-                    if
-                    (
-                        !(
-                            (method.Name == "Equals") &&
-                            (parameterTypes.Length == 1) &&
-                            (parameterTypes[0] == typeof(object)) &&
-                            (returnType == typeof(bool))
-                        )
-                    )
+                    var binder = Binder.Create<TBound>(Target, method, new[] { parameterType }, returnType);
+                    if (!boundMultimethodMap.TryGetValue(method.Name, out var boundTypeMap))
                     {
-                        var binder = Binder.Create<TBound>(Target, method, parameterTypes, returnType);
-                        map.Add(parameterTypes[0], Tuple.Create(binder.Bound, returnType));
+                        boundMultimethodMap.Add(method.Name, boundTypeMap = new Dictionary<Type, Tuple<TBound, Type>>());
+                    }
+                    if (!boundTypeMap.ContainsKey(parameterType))
+                    {
+                        boundTypeMap.Add(parameterType, Tuple.Create(binder.Bound, returnType));
                     }
                     return map;
                 }
@@ -143,6 +148,36 @@ namespace YSharp.Design.DoubleDispatch
         {
             PopulateBoundTypeMap(_action1, false);
             PopulateBoundTypeMap(_function1, true);
+        }
+
+        protected virtual bool TryBindAction1(string methodName, Type argType, out Action<object> bound)
+        {
+            methodName = !string.IsNullOrEmpty(methodName) ? methodName : throw new ArgumentException("cannot be null or empty", nameof(methodName));
+            bound = null;
+            if (_action1.TryGetValue(methodName, out var boundTypeMap))
+            {
+                if (boundTypeMap.TryGetValue(argType, out var tuple))
+                {
+                    bound = tuple.Item1;
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        protected virtual bool TryBindFunc1(string methodName, Type argType, Type returnType, out Func<object, object> bound)
+        {
+            methodName = !string.IsNullOrEmpty(methodName) ? methodName : throw new ArgumentException("cannot be null or empty", nameof(methodName));
+            bound = null;
+            if (_function1.TryGetValue(methodName, out var boundTypeMap))
+            {
+                if (boundTypeMap.TryGetValue(argType, out var tuple) && CovarianceCheck(returnType, tuple.Item2))
+                {
+                    bound = tuple.Item1;
+                    return true;
+                }
+            }
+            return false;
         }
 
         protected object Target { get; private set; }
@@ -162,9 +197,10 @@ namespace YSharp.Design.DoubleDispatch
             action = action ?? throw new ArgumentNullException(nameof(action));
             var target = action.Target ?? throw new ArgumentException("must be bound", nameof(action));
             var dispatch = new DoubleDispatchObject(target);
+            var methodName = action.GetMethodInfo().Name;
             Action<T> surrogate =
                 arg =>
-                    dispatch.Via(action, arg, orElse);
+                    dispatch.Via(methodName, arg, orElse);
             return surrogate;
         }
 
@@ -194,9 +230,10 @@ namespace YSharp.Design.DoubleDispatch
             function = function ?? throw new ArgumentNullException(nameof(function));
             var target = function.Target ?? throw new ArgumentException("must be bound", nameof(function));
             var dispatch = new DoubleDispatchObject(target);
+            var methodName = function.GetMethodInfo().Name;
             Func<T, TResult> surrogate =
                 arg =>
-                    dispatch.Via(function, arg, orElse, defaultResult);
+                    dispatch.Via(methodName, arg, orElse, defaultResult);
             return surrogate;
         }
 
@@ -208,36 +245,31 @@ namespace YSharp.Design.DoubleDispatch
             Initialize();
         }
 
-        public void Via<T>(Action<T> action, T arg) =>
-            Via(action, arg, null);
+        public void Via<T>(string methodName, T arg) =>
+            Via(methodName, arg, null);
 
-        public void Via<T>(Action<T> action, T arg, Action orElse)
+        public void Via<T>(string methodName, T arg, Action orElse)
         {
             var type = arg?.GetType();
-            if ((type != null) && _action1.TryGetValue(type, out var tuple))
+            if ((type != null) && TryBindAction1(methodName, type, out var bound))
             {
-                var bound = tuple.Item1;
                 bound(arg);
                 return;
             }
             orElse?.Invoke();
         }
 
-        public TResult Via<T, TResult>(Func<T, TResult> function, T arg) =>
-            Via(function, arg, null, default(TResult));
+        public TResult Via<T, TResult>(string methodName, T arg, Func<TResult> orElse) =>
+            Via(methodName, arg, orElse, default(TResult));
 
-        public TResult Via<T, TResult>(Func<T, TResult> function, T arg, Func<TResult> orElse) =>
-            Via(function, arg, orElse, default(TResult));
+        public TResult Via<T, TResult>(string methodName, T arg, TResult defaultResult) =>
+            Via(methodName, arg, null, defaultResult);
 
-        public TResult Via<T, TResult>(Func<T, TResult> function, T arg, TResult defaultResult) =>
-            Via(function, arg, null, defaultResult);
-
-        public TResult Via<T, TResult>(Func<T, TResult> function, T arg, Func<TResult> orElse, TResult defaultResult)
+        public TResult Via<T, TResult>(string methodName, T arg, Func<TResult> orElse, TResult defaultResult)
         {
             var type = arg?.GetType();
-            if ((type != null) && _function1.TryGetValue(type, out var tuple) && CovarianceCheck(typeof(TResult), tuple.Item2))
+            if ((type != null) && TryBindFunc1(methodName, type, typeof(TResult), out var bound))
             {
-                var bound = tuple.Item1;
                 return (TResult)bound(arg);
             }
             return orElse != null ? orElse() : defaultResult;
