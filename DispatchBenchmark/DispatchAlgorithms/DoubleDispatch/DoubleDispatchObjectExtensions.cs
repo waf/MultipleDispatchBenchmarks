@@ -4,16 +4,19 @@ namespace YSharp.Design.DoubleDispatch.Extensions
 {
     public static class DoubleDispatchObjectExtensions
     {
-        public static DoubleDispatchObject ThreadSafe<T>(this T target, ref DoubleDispatchObject site)
-            where T : class
+        public static DoubleDispatchObject EnsureThreadSafe(this object target, ref DoubleDispatchObject dispatchObject) =>
+            EnsureThreadSafe(target, ref dispatchObject, obj => new DoubleDispatchObject(obj));
+
+        public static DoubleDispatchObject EnsureThreadSafe<TDispatch>(this object target, ref DoubleDispatchObject dispatchObject, Func<object, TDispatch> createDispatchObject)
+            where TDispatch : DoubleDispatchObject
         {
             target = target ?? throw new ArgumentNullException(nameof(target));
-            var dispatch = site;
-            if (dispatch == null)
+            createDispatchObject = createDispatchObject ?? throw new ArgumentNullException(nameof(createDispatchObject));
+            if (dispatchObject == null)
             {
-                System.Threading.Interlocked.CompareExchange(ref site, dispatch = new DoubleDispatchObject(target), null);
+                System.Threading.Interlocked.CompareExchange(ref dispatchObject, createDispatchObject(target) ?? throw new InvalidOperationException(), null);
             }
-            return dispatch;
+            return dispatchObject;
         }
 
         /// <summary>

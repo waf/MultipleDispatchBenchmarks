@@ -48,10 +48,10 @@ namespace DispatchBenchmark.Tests
         // DoubleDispatchObject usage through composition
         public class POCOServiceDerived : POCOServiceBase
         {
-            private DoubleDispatchObject dispatch;
+            private DoubleDispatchObject dispatchObject;
 
             public override void Handle(POCOEntity entity) =>
-                (dispatch = dispatch ?? new DoubleDispatchObject(this))
+                this.EnsureThreadSafe(ref dispatchObject)
                 .Via(Handle, entity,
                     () =>
                     {

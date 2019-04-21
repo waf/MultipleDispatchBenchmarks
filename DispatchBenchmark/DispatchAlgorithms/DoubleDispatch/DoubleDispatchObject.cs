@@ -97,33 +97,41 @@ namespace YSharp.Design.DoubleDispatch
     {
         private readonly IDictionary<Type, Action<object>> _action1 = new Dictionary<Type, Action<object>>();
         private readonly IDictionary<Type, Func<object, object>> _function1 = new Dictionary<Type, Func<object, object>>();
-        private readonly object _target;
 
-        private void PrepareBinder<TBound>(IDictionary<Type, TBound> dispatch, int parameterCount, bool isFunc)
+        private void PopulateBoundTypeMap<TBound>(IDictionary<Type, TBound> boundTypeMap, bool forFuncType)
         {
-            _target
+            var parameterCount = typeof(TBound).GetGenericArguments().Length - (forFuncType ? 1 : 0);
+            Target
             .GetType()
             .GetMethods(BindingFlags.Public | BindingFlags.Instance)
             .Where
             (
                 m =>
-                    (isFunc ? m.ReturnType != typeof(void) : m.ReturnType == typeof(void)) &&
+                    (forFuncType ? m.ReturnType != typeof(void) : m.ReturnType == typeof(void)) &&
                     m.GetParameters().Length == parameterCount &&
                     !m.GetParameters().Any(p => p.ParameterType.ContainsGenericParameters)
             )
             .Aggregate
             (
-                dispatch,
+                boundTypeMap,
                 (map, method) =>
                 {
                     var parameterTypes = method.GetParameters().Select(p => p.ParameterType).ToArray();
                     var returnType = method.ReturnType != typeof(void) ? method.ReturnType : null;
-                    var binder = Binder.Create<TBound>(_target, method, parameterTypes, returnType);
+                    var binder = Binder.Create<TBound>(Target, method, parameterTypes, returnType);
                     map.Add(parameterTypes[0], binder.Bound);
-                    return dispatch;
+                    return boundTypeMap;
                 }
             );
         }
+
+        protected virtual void Initialize()
+        {
+            PopulateBoundTypeMap(_action1, false);
+            PopulateBoundTypeMap(_function1, true);
+        }
+
+        protected object Target { get; private set; }
 
         //TODO: more unit tests
         /// <summary>
@@ -182,9 +190,8 @@ namespace YSharp.Design.DoubleDispatch
 
         public DoubleDispatchObject(object target)
         {
-            _target = target ?? this;
-            PrepareBinder(_action1, 1, false);
-            PrepareBinder(_function1, 1, true);
+            Target = target ?? this;
+            Initialize();
         }
 
         public void Via<T>(Action<T> action, T arg) =>
