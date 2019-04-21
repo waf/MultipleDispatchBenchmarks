@@ -107,6 +107,43 @@ namespace DispatchBenchmark.Tests
             }
         }
 
+        public class OpaqueValueResult
+        {
+            protected OpaqueValueResult(Guid guid) =>
+                UniqueId = guid;
+
+            public Guid UniqueId { get; private set; }
+        }
+
+        public class OpaqueValueOperation1 { }
+        public class OpaqueValueResult1 : OpaqueValueResult
+        {
+            public OpaqueValueResult1(Guid guid) : base(guid) { }
+        }
+
+        public class OpaqueValueOperation2 { }
+        public class OpaqueValueResult2 : OpaqueValueResult
+        {
+            public OpaqueValueResult2(Guid guid) : base(guid) { }
+        }
+
+        public struct OpaqueValue
+        {
+            private readonly Guid guid;
+
+            public OpaqueValue(Guid guid) =>
+                this.guid = guid;
+
+            public object Apply(object operation) =>
+                throw new NotImplementedException("Please use an overload or a surrogate");
+
+            public OpaqueValueResult1 Apply(OpaqueValueOperation1 operation) =>
+                new OpaqueValueResult1(guid);
+
+            public OpaqueValueResult2 Apply(OpaqueValueOperation2 operation) =>
+                new OpaqueValueResult2(guid);
+        }
+
         [Fact]
         public void POCOServiceBaseOnlyImplementsNoops()
         {
@@ -248,6 +285,24 @@ namespace DispatchBenchmark.Tests
                 },
                 lines.ToArray()
             );
+        }
+
+        [Fact]
+        public void DoubleDispatchObject_SurrogateCanCorrectlyDispatchOverValueTypes()
+        {
+            Func<OpaqueValue, object, object> takeAnOpaqueValueAndOperationAndDispatch =
+                (opaqueValue, someOperation) =>
+                    opaqueValue.SurrogateInvoke(opaqueValue.Apply, someOperation);
+
+            var myGuid = Guid.NewGuid();
+            var myOpaqueValue = new OpaqueValue(myGuid);
+            var result1 = takeAnOpaqueValueAndOperationAndDispatch(myOpaqueValue, new OpaqueValueOperation1());
+            var result2 = takeAnOpaqueValueAndOperationAndDispatch(myOpaqueValue, new OpaqueValueOperation2());
+
+            Assert.Equal(typeof(OpaqueValueResult1), result1.GetType());
+            Assert.Equal(myGuid, (result1 as OpaqueValueResult).UniqueId);
+            Assert.Equal(typeof(OpaqueValueResult2), result2.GetType());
+            Assert.Equal(myGuid, (result2 as OpaqueValueResult).UniqueId);
         }
     }
 }

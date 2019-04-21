@@ -118,8 +118,19 @@ namespace YSharp.Design.DoubleDispatch
                 {
                     var parameterTypes = method.GetParameters().Select(p => p.ParameterType).ToArray();
                     var returnType = method.ReturnType != typeof(void) ? method.ReturnType : null;
-                    var binder = Binder.Create<TBound>(Target, method, parameterTypes, returnType);
-                    map.Add(parameterTypes[0], binder.Bound);
+                    if
+                    (
+                        !(
+                            (method.Name == "Equals") &&
+                            (parameterTypes.Length == 1) &&
+                            (parameterTypes[0] == typeof(object)) &&
+                            (returnType == typeof(bool))
+                        )
+                    )
+                    {
+                        var binder = Binder.Create<TBound>(Target, method, parameterTypes, returnType);
+                        map.Add(parameterTypes[0], binder.Bound);
+                    }
                     return boundTypeMap;
                 }
             );

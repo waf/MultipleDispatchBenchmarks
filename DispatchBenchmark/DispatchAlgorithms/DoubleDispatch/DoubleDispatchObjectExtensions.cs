@@ -32,7 +32,7 @@ namespace YSharp.Design.DoubleDispatch.Extensions
         {
             target = target ?? throw new ArgumentNullException(nameof(target));
             method = method ?? throw new ArgumentNullException(nameof(method));
-            if (!ReferenceEquals(target, method.Target))
+            if (!ReferenceEquals(target, method.Target) && !target.GetType().IsValueType)
             {
                 throw new InvalidOperationException($"{nameof(method)} must be bound to {nameof(target)}");
             }
@@ -64,7 +64,7 @@ namespace YSharp.Design.DoubleDispatch.Extensions
         {
             target = target ?? throw new ArgumentNullException(nameof(target));
             method = method ?? throw new ArgumentNullException(nameof(method));
-            if (!ReferenceEquals(target, method.Target))
+            if (!ReferenceEquals(target, method.Target) && !target.GetType().IsValueType)
             {
                 throw new InvalidOperationException($"{nameof(method)} must be bound to {nameof(target)}");
             }
