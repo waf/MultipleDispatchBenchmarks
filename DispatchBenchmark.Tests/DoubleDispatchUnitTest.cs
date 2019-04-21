@@ -145,7 +145,7 @@ namespace DispatchBenchmark.Tests
         }
 
         [Fact]
-        public void POCOServiceBaseOnlyImplementsNoops()
+        public void POCOServiceBase_OnlyImplementsNoops()
         {
             var service = new POCOServiceBase();
 
@@ -166,7 +166,7 @@ namespace DispatchBenchmark.Tests
         }
 
         [Fact]
-        public void DoubleDispatchObject_CanCorrectlyDispatchInPOCOServiceDerived()
+        public void DoubleDispatchObject_CanDispatch_OverPOCOServiceDerived()
         {
             POCOServiceBase service = new POCOServiceDerived();
 
@@ -206,7 +206,7 @@ namespace DispatchBenchmark.Tests
         }
 
         [Fact]
-        public void DoubleDispatchObject_CanCorrectlyDispatchInServiceV2()
+        public void DoubleDispatchObject_CanDispatch_OverServiceV2()
         {
             var service = new ServiceV2();
 
@@ -246,7 +246,37 @@ namespace DispatchBenchmark.Tests
         }
 
         [Fact]
-        public void DoubleDispatchObject_SurrogateCanCorrectlyDispatchOverPOCOServiceBase()
+        public void DoubleDispatchObject_CanHonor_OrElseActionInServiceV2()
+        {
+            var service = new ServiceV2();
+
+            POCOEntity entity = new POCOUnsupported("oops");
+            service.Handle(null as POCOEntity);
+            service.Handle(entity);
+
+            var serviceText = service.ToString();
+            var reader = new StringReader(serviceText);
+            var lines = new List<string>();
+            string line;
+            while ((line = reader.ReadLine()) != null)
+            {
+                lines.Add(line);
+            }
+
+            Assert.Equal(2, lines.Count);
+            Assert.Equal
+            (
+                new string[]
+                {
+                    "unsupported entity: <null>",
+                    "unsupported entity: POCOUnsupported(oops)"
+                },
+                lines.ToArray()
+            );
+        }
+
+        [Fact]
+        public void Surrogate_CanDispatch_OverPOCOServiceBase()
         {
             var service = new POCOServiceBase();
 
@@ -288,7 +318,7 @@ namespace DispatchBenchmark.Tests
         }
 
         [Fact]
-        public void DoubleDispatchObject_SurrogateCanCorrectlyDispatchOverValueTypes()
+        public void Surrogate_CanDispatch_OverValueTypes()
         {
             Func<OpaqueValue, object, object> takeAnOpaqueValueAndOperationAndDispatch =
                 (opaqueValue, someOperation) =>
@@ -303,6 +333,33 @@ namespace DispatchBenchmark.Tests
             Assert.Equal(myGuid, (result1 as OpaqueValueResult).UniqueId);
             Assert.Equal(typeof(OpaqueValueResult2), result2.GetType());
             Assert.Equal(myGuid, (result2 as OpaqueValueResult).UniqueId);
+        }
+
+        [Fact]
+        public void Surrogate_Requires_ReferenceTypeWithSameTarget()
+        {
+            var serviceV2_1 = new ServiceV2();
+            var serviceV2_2 = new ServiceV2();
+
+            Action tryBadSurrogateInvoke =
+                () =>
+                {
+                    POCOEntity entity = new POCOFile("file1");
+                    serviceV2_2.SurrogateInvoke(serviceV2_1.Handle, entity);
+                };
+
+            Exception error = null;
+            try
+            {
+                tryBadSurrogateInvoke();
+            }
+            catch (Exception ex)
+            {
+                error = ex;
+            }
+
+            Assert.NotEqual(null, error);
+            Assert.IsType(typeof(InvalidOperationException), error);
         }
     }
 }

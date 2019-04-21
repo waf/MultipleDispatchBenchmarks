@@ -179,7 +179,6 @@ namespace YSharp.Design.DoubleDispatch
 
         protected object Target { get; private set; }
 
-        //TODO: more unit tests
         /// <summary>
         /// Creates a surrogate of the action delegate, which enables double dispatch in the concrete type of its target
         /// </summary>
