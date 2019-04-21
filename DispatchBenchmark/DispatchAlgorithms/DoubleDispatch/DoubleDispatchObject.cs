@@ -131,7 +131,7 @@ namespace YSharp.Design.DoubleDispatch
                         var binder = Binder.Create<TBound>(Target, method, parameterTypes, returnType);
                         map.Add(parameterTypes[0], Tuple.Create(binder.Bound, returnType));
                     }
-                    return boundTypeMap;
+                    return map;
                 }
             );
         }
