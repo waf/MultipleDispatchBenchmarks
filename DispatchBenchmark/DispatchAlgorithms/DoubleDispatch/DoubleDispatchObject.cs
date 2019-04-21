@@ -95,19 +95,19 @@ namespace YSharp.Design.DoubleDispatch
 
     public class DoubleDispatchObject
     {
-        private readonly IDictionary<Type, Action<object>> _action1 = new Dictionary<Type, Action<object>>();
-        private readonly IDictionary<Type, Func<object, object>> _function1 = new Dictionary<Type, Func<object, object>>();
+        private readonly IDictionary<Type, Tuple<Action<object>, Type>> _action1 = new Dictionary<Type, Tuple<Action<object>, Type>>();
+        private readonly IDictionary<Type, Tuple<Func<object, object>, Type>> _function1 = new Dictionary<Type, Tuple<Func<object, object>, Type>>();
 
-        private void PopulateBoundTypeMap<TBound>(IDictionary<Type, TBound> boundTypeMap, bool forFuncType)
+        private void PopulateBoundTypeMap<TBound>(IDictionary<Type, Tuple<TBound, Type>> boundTypeMap, bool forFunctionType)
         {
-            var parameterCount = typeof(TBound).GetGenericArguments().Length - (forFuncType ? 1 : 0);
+            var parameterCount = typeof(TBound).GetGenericArguments().Length - (forFunctionType ? 1 : 0);
             Target
             .GetType()
             .GetMethods(BindingFlags.Public | BindingFlags.Instance)
             .Where
             (
                 m =>
-                    (forFuncType ? m.ReturnType != typeof(void) : m.ReturnType == typeof(void)) &&
+                    (forFunctionType ? m.ReturnType != typeof(void) : m.ReturnType == typeof(void)) &&
                     m.GetParameters().Length == parameterCount &&
                     !m.GetParameters().Any(p => p.ParameterType.ContainsGenericParameters)
             )
@@ -129,12 +129,15 @@ namespace YSharp.Design.DoubleDispatch
                     )
                     {
                         var binder = Binder.Create<TBound>(Target, method, parameterTypes, returnType);
-                        map.Add(parameterTypes[0], binder.Bound);
+                        map.Add(parameterTypes[0], Tuple.Create(binder.Bound, returnType));
                     }
                     return boundTypeMap;
                 }
             );
         }
+
+        protected static bool CovarianceCheck(Type functionReturnType, Type boundFunctionReturnType) =>
+            functionReturnType.IsAssignableFrom(boundFunctionReturnType);
 
         protected virtual void Initialize()
         {
@@ -211,8 +214,9 @@ namespace YSharp.Design.DoubleDispatch
         public void Via<T>(Action<T> action, T arg, Action orElse)
         {
             var type = arg?.GetType();
-            if ((type != null) && _action1.TryGetValue(type, out var bound))
+            if ((type != null) && _action1.TryGetValue(type, out var tuple))
             {
+                var bound = tuple.Item1;
                 bound(arg);
                 return;
             }
@@ -231,8 +235,9 @@ namespace YSharp.Design.DoubleDispatch
         public TResult Via<T, TResult>(Func<T, TResult> function, T arg, Func<TResult> orElse, TResult defaultResult)
         {
             var type = arg?.GetType();
-            if ((type != null) && _function1.TryGetValue(type, out var bound))
+            if ((type != null) && _function1.TryGetValue(type, out var tuple) && CovarianceCheck(typeof(TResult), tuple.Item2))
             {
+                var bound = tuple.Item1;
                 return (TResult)bound(arg);
             }
             return orElse != null ? orElse() : defaultResult;
