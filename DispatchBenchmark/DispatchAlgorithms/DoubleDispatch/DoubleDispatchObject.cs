@@ -101,25 +101,22 @@ namespace YSharp.Design.DoubleDispatch
         private void PopulateBoundTypeMap<TBound>(IDictionary<string, IDictionary<Type, Tuple<TBound, Type>>> boundMultimethodMap, bool forFunctionType)
         {
             ParameterInfo[] parameters;
-            var methods =
-                Target
-                .GetType()
-                .GetMethods(BindingFlags.Public | BindingFlags.Instance)
-                .Where
-                (
-                    m =>
-                        (forFunctionType ? m.ReturnType != typeof(void) : m.ReturnType == typeof(void)) &&
-                        (parameters = m.GetParameters()).Length == 1 &&
-                        !parameters[0].ParameterType.ContainsGenericParameters &&
-                        !
-                        (
-                            (m.Name == "Equals") &&
-                            (parameters[0].ParameterType == typeof(object)) &&
-                            (m.ReturnType == typeof(bool))
-                        )
-                )
-                .ToArray();
-            methods
+            Target
+            .GetType()
+            .GetMethods(BindingFlags.Public | BindingFlags.Instance)
+            .Where
+            (
+                m =>
+                    (forFunctionType ? m.ReturnType != typeof(void) : m.ReturnType == typeof(void)) &&
+                    (parameters = m.GetParameters()).Length == 1 &&
+                    !parameters[0].ParameterType.ContainsGenericParameters &&
+                    !
+                    (
+                        (m.Name == "Equals") &&
+                        (parameters[0].ParameterType == typeof(object)) &&
+                        (m.ReturnType == typeof(bool))
+                    )
+            )
             .Aggregate
             (
                 boundMultimethodMap,
