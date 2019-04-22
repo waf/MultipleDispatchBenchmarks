@@ -7,7 +7,7 @@ namespace YSharp.Design.DoubleDispatch.Extensions
         public static DoubleDispatchObject EnsureThreadSafe(this object target, ref DoubleDispatchObject dispatchObject) =>
             EnsureThreadSafe(target, ref dispatchObject, obj => new DoubleDispatchObject(obj));
 
-        public static DoubleDispatchObject EnsureThreadSafe<TDispatch>(this object target, ref DoubleDispatchObject dispatchObject, Func<object, TDispatch> createDispatchObject)
+        public static DoubleDispatchObject EnsureThreadSafe<TDispatch>(this object target, ref TDispatch dispatchObject, Func<object, TDispatch> createDispatchObject)
             where TDispatch : DoubleDispatchObject
         {
             target = target ?? throw new ArgumentNullException(nameof(target));

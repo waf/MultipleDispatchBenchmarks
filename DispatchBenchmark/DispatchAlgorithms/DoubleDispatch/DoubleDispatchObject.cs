@@ -98,7 +98,7 @@ namespace YSharp.Design.DoubleDispatch
         private readonly IDictionary<string, IDictionary<Type, Tuple<Action<object>, Type>>> _action1 = new Dictionary<string, IDictionary<Type, Tuple<Action<object>, Type>>>();
         private readonly IDictionary<string, IDictionary<Type, Tuple<Func<object, object>, Type>>> _function1 = new Dictionary<string, IDictionary<Type, Tuple<Func<object, object>, Type>>>();
 
-        private void PopulateBoundTypeMap<TBound>(IDictionary<string, IDictionary<Type, Tuple<TBound, Type>>> boundMultimethodMap, bool forFunctionType)
+        private void PopulateMultimethodMap<TBound>(IDictionary<string, IDictionary<Type, Tuple<TBound, Type>>> multimethodMap, bool forFunctionType)
         {
             ParameterInfo[] parameters;
             Target
@@ -119,15 +119,15 @@ namespace YSharp.Design.DoubleDispatch
             )
             .Aggregate
             (
-                boundMultimethodMap,
+                multimethodMap,
                 (map, method) =>
                 {
                     var parameterType = method.GetParameters()[0].ParameterType;
                     var returnType = method.ReturnType != typeof(void) ? method.ReturnType : null;
                     var binder = Binder.Create<TBound>(Target, method, new[] { parameterType }, returnType);
-                    if (!boundMultimethodMap.TryGetValue(method.Name, out var boundTypeMap))
+                    if (!multimethodMap.TryGetValue(method.Name, out var boundTypeMap))
                     {
-                        boundMultimethodMap.Add(method.Name, boundTypeMap = new Dictionary<Type, Tuple<TBound, Type>>());
+                        multimethodMap.Add(method.Name, boundTypeMap = new Dictionary<Type, Tuple<TBound, Type>>());
                     }
                     if (!boundTypeMap.ContainsKey(parameterType))
                     {
@@ -143,8 +143,8 @@ namespace YSharp.Design.DoubleDispatch
 
         protected virtual void Initialize()
         {
-            PopulateBoundTypeMap(_action1, false);
-            PopulateBoundTypeMap(_function1, true);
+            PopulateMultimethodMap(_action1, false);
+            PopulateMultimethodMap(_function1, true);
         }
 
         protected virtual bool TryBindAction1(string methodName, Type argType, out Action<object> bound)
@@ -162,6 +162,17 @@ namespace YSharp.Design.DoubleDispatch
             return false;
         }
 
+        protected virtual bool TryInvoke<T>(string methodName, T arg)
+        {
+            var type = arg?.GetType();
+            if ((type != null) && TryBindAction1(methodName, type, out var bound))
+            {
+                bound(arg);
+                return true;
+            }
+            return false;
+        }
+
         protected virtual bool TryBindFunc1(string methodName, Type argType, Type returnType, out Func<object, object> bound)
         {
             methodName = !string.IsNullOrEmpty(methodName) ? methodName : throw new ArgumentException("cannot be null or empty", nameof(methodName));
@@ -173,6 +184,18 @@ namespace YSharp.Design.DoubleDispatch
                     bound = tuple.Item1;
                     return true;
                 }
+            }
+            return false;
+        }
+
+        protected virtual bool TryInvoke<T, TResult>(string methodName, T arg, TResult defaultResult, out TResult result)
+        {
+            var type = arg?.GetType();
+            result = defaultResult;
+            if ((type != null) && TryBindFunc1(methodName, type, typeof(TResult), out var bound))
+            {
+                result = (TResult)bound(arg);
+                return true;
             }
             return false;
         }
@@ -246,13 +269,10 @@ namespace YSharp.Design.DoubleDispatch
 
         public void Via<T>(string methodName, T arg, Action orElse)
         {
-            var type = arg?.GetType();
-            if ((type != null) && TryBindAction1(methodName, type, out var bound))
+            if (!TryInvoke(methodName, arg))
             {
-                bound(arg);
-                return;
+                orElse?.Invoke();
             }
-            orElse?.Invoke();
         }
 
         public TResult Via<T, TResult>(string methodName, T arg, Func<TResult> orElse) =>
@@ -263,12 +283,11 @@ namespace YSharp.Design.DoubleDispatch
 
         public TResult Via<T, TResult>(string methodName, T arg, Func<TResult> orElse, TResult defaultResult)
         {
-            var type = arg?.GetType();
-            if ((type != null) && TryBindFunc1(methodName, type, typeof(TResult), out var bound))
+            if (!TryInvoke(methodName, arg, defaultResult, out var result))
             {
-                return (TResult)bound(arg);
+                result = orElse != null ? orElse() : result;
             }
-            return orElse != null ? orElse() : defaultResult;
+            return result;
         }
     }
 }
