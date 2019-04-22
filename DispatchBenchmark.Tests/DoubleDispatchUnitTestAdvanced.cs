@@ -29,23 +29,24 @@ namespace DispatchBenchmark.Tests
     public class Pattern1 : Pattern { }
     public class Pattern2 : Pattern { }
 
-    public class Computation
+    public class Computation { }
+    public class Computation<TInput> : Computation
     {
-        protected Computation(Pattern input) =>
+        protected Computation(TInput input) =>
             Input = input;
 
-        public Pattern Input { get; private set; }
+        public TInput Input { get; private set; }
     }
-    public class Computation1 : Computation { public Computation1(Pattern1 input) : base(input) { } }
-    public class Computation2 : Computation { public Computation2(Pattern2 input) : base(input) { } }
+    public class Computation1 : Computation<Pattern1> { public Computation1(Pattern1 input) : base(input) { } }
+    public class Computation2 : Computation<Pattern2> { public Computation2(Pattern2 input) : base(input) { } }
 
     public class MemoizingPatternMatcher
     {
         private MemoizingDispatchObject dispatchObject;
 
-        public object Match(object arg) =>
+        public Computation Match(Pattern pattern) =>
             this.EnsureThreadSafe(ref dispatchObject, target => new MemoizingDispatchObject(target))
-            .Via(nameof(Match), arg, default(Computation));
+            .Via(nameof(Match), pattern, default(Computation));
 
         public Computation1 Match(Pattern1 pattern) =>
             dispatchObject.GetOrCache(pattern, input => new Computation1(input));
@@ -57,9 +58,9 @@ namespace DispatchBenchmark.Tests
     public class DoubleDispatchUnitTestAdvanced
     {
         [Fact]
-        public void MemoizingPatternMatcher_CanMemoize()
+        public void MemoizingPatternMatcher_CanMatchAndMemoize()
         {
-            var match = (Func<object, object>)new MemoizingPatternMatcher().Match;
+            var match = (Func<Pattern, Computation>)new MemoizingPatternMatcher().Match;
 
             var pattern1_1 = new Pattern1();
             var pattern1_2 = new Pattern1();
