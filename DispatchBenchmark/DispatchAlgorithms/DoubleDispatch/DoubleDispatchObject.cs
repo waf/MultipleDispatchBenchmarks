@@ -103,10 +103,11 @@ namespace YSharp.Design.DoubleDispatch
             ParameterInfo[] parameters;
             Target
             .GetType()
-            .GetMethods(BindingFlags.Public | BindingFlags.Instance)
+            .GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
             .Where
             (
                 m =>
+                    (m.IsPublic || m.IsFamily || m.IsFamilyOrAssembly) &&
                     (forFunctionType ? m.ReturnType != typeof(void) : m.ReturnType == typeof(void)) &&
                     (parameters = m.GetParameters()).Length == 1 &&
                     !parameters[0].ParameterType.ContainsGenericParameters &&

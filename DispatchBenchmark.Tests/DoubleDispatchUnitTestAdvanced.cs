@@ -55,6 +55,82 @@ namespace DispatchBenchmark.Tests
             dispatchObject.GetOrCache(pattern, input => new Computation2(input));
     }
 
+    #region Classic Space Object Collision Example
+    /*
+     * See https://en.wikipedia.org/wiki/Multiple_dispatch#Examples
+     */
+    public class SpaceObject
+    {
+        private DoubleDispatchObject doubleDispatchObject;
+
+        public string CollideWith(SpaceObject other) =>
+            this.EnsureThreadSafe(ref doubleDispatchObject)
+            .Via(nameof(CollideWith), other, () => default(string) ?? throw new NotImplementedException());
+    }
+
+    // When "this" is more massive, it obliterates the other space object,
+    // otherwise, two space objects of the same type destroy each other
+    public class TelecomSatellite : SpaceObject
+    {
+        protected string CollideWith(TelecomSatellite other) =>
+            "the satellites destroy each other";
+
+        protected string CollideWith(Spaceship spaceship) =>
+            spaceship.CollideWith(this);
+
+        protected string CollideWith(Asteroid asteroid) =>
+            asteroid.CollideWith(this);
+
+        protected string CollideWith(Planet planet) =>
+            planet.CollideWith(this);
+    }
+
+    public class Spaceship : SpaceObject
+    {
+        protected string CollideWith(TelecomSatellite satellite) =>
+            "the spaceship obliterates the satellite";
+
+        protected string CollideWith(Spaceship spaceship) =>
+            "the spaceships destroy each other";
+
+        protected string CollideWith(Asteroid asteroid) =>
+            asteroid.CollideWith(this);
+
+        protected string CollideWith(Planet planet) =>
+            planet.CollideWith(this);
+    }
+
+    public class Asteroid : SpaceObject
+    {
+        protected string CollideWith(TelecomSatellite satellite) =>
+            "the asteroid obliterates the satellite";
+
+        protected string CollideWith(Spaceship spaceship) =>
+            "the asteroid obliterates the spaceship";
+
+        protected string CollideWith(Asteroid asteroid) =>
+            "the asteroids destroy each other";
+
+        protected string CollideWith(Planet planet) =>
+            planet.CollideWith(this);
+    }
+
+    public class Planet : SpaceObject
+    {
+        protected string CollideWith(TelecomSatellite satellite) =>
+            "the planet obliterates the satellite";
+
+        protected string CollideWith(Spaceship spaceship) =>
+            "the planet obliterates the spaceship";
+
+        protected string CollideWith(Asteroid asteroid) =>
+            "the planet obliterates the asteroid";
+
+        protected string CollideWith(Planet planet) =>
+            "the planets destroy each other";
+    }
+    #endregion
+
     public class DoubleDispatchUnitTestAdvanced
     {
         [Fact]
@@ -83,5 +159,43 @@ namespace DispatchBenchmark.Tests
             Assert.Equal(false, ReferenceEquals(computation1_1, computation1_2));
             Assert.Equal(true, ReferenceEquals(computation1_1, computation1_3));
         }
+
+        #region Classic Space Object Collision Example
+        /*
+         * See https://en.wikipedia.org/wiki/Multiple_dispatch#Examples
+         */
+        [Fact]
+        public void ClassicSpaceObjectCollisionExample_CanDispatchAsExpected()
+        {
+            var planet1 = new Planet();
+            var planet2 = new Planet();
+            var asteroid1 = new Asteroid();
+            var asteroid2 = new Asteroid();
+            var spaceship1 = new Spaceship();
+            var spaceship2 = new Spaceship();
+            var satellite1 = new TelecomSatellite();
+            var satellite2 = new TelecomSatellite();
+
+            Assert.Equal(planet1.CollideWith(planet2), "the planets destroy each other");
+            Assert.Equal(planet1.CollideWith(asteroid1), "the planet obliterates the asteroid");
+            Assert.Equal(asteroid1.CollideWith(planet1), "the planet obliterates the asteroid");
+            Assert.Equal(planet1.CollideWith(spaceship1), "the planet obliterates the spaceship");
+            Assert.Equal(spaceship1.CollideWith(planet1), "the planet obliterates the spaceship");
+            Assert.Equal(planet1.CollideWith(satellite1), "the planet obliterates the satellite");
+            Assert.Equal(satellite1.CollideWith(planet1), "the planet obliterates the satellite");
+
+            Assert.Equal(asteroid1.CollideWith(asteroid2), "the asteroids destroy each other");
+            Assert.Equal(asteroid1.CollideWith(spaceship1), "the asteroid obliterates the spaceship");
+            Assert.Equal(spaceship1.CollideWith(asteroid1), "the asteroid obliterates the spaceship");
+            Assert.Equal(asteroid1.CollideWith(satellite1), "the asteroid obliterates the satellite");
+            Assert.Equal(satellite1.CollideWith(asteroid1), "the asteroid obliterates the satellite");
+
+            Assert.Equal(spaceship1.CollideWith(spaceship2), "the spaceships destroy each other");
+            Assert.Equal(spaceship1.CollideWith(satellite1), "the spaceship obliterates the satellite");
+            Assert.Equal(satellite1.CollideWith(spaceship1), "the spaceship obliterates the satellite");
+
+            Assert.Equal(satellite1.CollideWith(satellite2), "the satellites destroy each other");
+        }
+        #endregion
     }
 }
