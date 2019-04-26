@@ -192,7 +192,7 @@ namespace DispatchBenchmark.Tests
 
     /*
      * Invokes a driver function typed by a source (TSource) and a persistable representation (TData)
-     * or its domain model (TModel), providing it with,
+     * of its domain model (TModel), providing it with,
      * 
      * a) self,
      * b) a new TSource instance,
@@ -203,7 +203,7 @@ namespace DispatchBenchmark.Tests
      * of the overall ETL (Extract-Transform-Load) process, that is,
      * 
      * 1) Extract an input TModel from TSource
-     * 2) Transform the input TModel of (1) it into another
+     * 2) Transform the input TModel of (1) into another
      * 3) Load the resulting TModel of (2) into a TData store
      * 
      * Thus, the driver function does not know how to transform a TModel
