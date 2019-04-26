@@ -329,9 +329,9 @@ namespace DispatchBenchmark.Tests
             var result1 = takeAnOpaqueValueAndOperationAndDispatch(myOpaqueValue, new OpaqueValueOperation1());
             var result2 = takeAnOpaqueValueAndOperationAndDispatch(myOpaqueValue, new OpaqueValueOperation2());
 
-            Assert.Equal(typeof(OpaqueValueResult1), result1.GetType());
+            Assert.IsType(typeof(OpaqueValueResult1), result1);
             Assert.Equal(myGuid, (result1 as OpaqueValueResult).UniqueId);
-            Assert.Equal(typeof(OpaqueValueResult2), result2.GetType());
+            Assert.IsType(typeof(OpaqueValueResult2), result2);
             Assert.Equal(myGuid, (result2 as OpaqueValueResult).UniqueId);
         }
 
@@ -358,7 +358,7 @@ namespace DispatchBenchmark.Tests
                 error = ex;
             }
 
-            Assert.NotEqual(null, error);
+            Assert.NotNull(error);
             Assert.IsType(typeof(InvalidOperationException), error);
         }
     }

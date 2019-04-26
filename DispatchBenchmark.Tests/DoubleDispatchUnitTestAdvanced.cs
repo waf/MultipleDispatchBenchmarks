@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using Xunit;
 
 namespace DispatchBenchmark.Tests
@@ -7,6 +8,7 @@ namespace DispatchBenchmark.Tests
     using YSharp.Design.DoubleDispatch;
     using YSharp.Design.DoubleDispatch.Extensions;
 
+    #region Memoizing Pattern Matcher Sample / Test
     public class MemoizingDispatchObject : DoubleDispatchObject
     {
         private readonly IDictionary<object, object> _memoization = new Dictionary<object, object>();
@@ -54,8 +56,9 @@ namespace DispatchBenchmark.Tests
         public Computation2 Match(Pattern2 pattern) =>
             dispatchObject.GetOrCache(pattern, input => new Computation2(input));
     }
+    #endregion
 
-    #region Classic Space Object Collision Example
+    #region Classic Space Object Collision Sample / Test
     /*
      * See https://en.wikipedia.org/wiki/Multiple_dispatch#Examples
      */
@@ -131,8 +134,53 @@ namespace DispatchBenchmark.Tests
     }
     #endregion
 
+    #region Double Dispatch Over Static Method Overloads (Several Static Classes) Sample / Test
+    public struct IAmNotANumber { }
+
+    public static class MathV2
+    {
+        // Implements the double dispatch of this MathV2's static methods, be they novelty ones or defaults
+        private static DoubleDispatchObject dispatchObject;
+
+        // Caches the surrogate used to implement double dispatch over the System.Math.Abs(?) method's overloads
+        private static readonly Func<object, object> system_math_abs =
+            default(object)
+            .CreateSurrogate
+            (
+                typeof(Math),
+                nameof(Math.Abs),
+                default(object),
+                () =>
+                    throw new NotImplementedException()
+            );
+
+        // Invokes the best System.Math.Abs(?) overload through number's TNumber runtime type
+        private static TNumber MathAbs<TNumber>(TNumber number) =>
+            (TNumber)system_math_abs(number);
+
+        // Makes this MathV2.Abs<TNumber>(TNumber) default to double dispatch over the System.Math.Abs(?) method's overloads
+        // when the TNumber argument doesn't match our novelty signature (see below)
+        public static TNumber Abs<TNumber>(TNumber number)
+            where TNumber : struct =>
+            MathAbs(number);
+
+        // This MathV2's novelty signature
+        public static TNumber[] Abs<TNumber>(params TNumber[] numbers)
+            where TNumber : struct =>
+            numbers?
+            .Select
+            (
+                number =>
+                    typeof(MathV2).EnsureThreadSafe(ref dispatchObject) // as usual
+                    .Via(nameof(Math.Abs), number, MathAbs(number)/* <- Same default as the above */)
+            )
+            .ToArray();
+    }
+    #endregion
+
     public class DoubleDispatchUnitTestAdvanced
     {
+        #region Memoizing Pattern Matcher Sample / Test
         [Fact]
         public void MemoizingPatternMatcher_CanMatchAndMemoize()
         {
@@ -147,25 +195,26 @@ namespace DispatchBenchmark.Tests
             var computation1_3 = match(pattern1_1);
             var computation2 = match(pattern2);
 
-            Assert.Equal(false, ReferenceEquals(computation1_1, computation2));
-            Assert.Equal(false, ReferenceEquals(computation1_2, computation2));
-            Assert.Equal(false, ReferenceEquals(computation1_3, computation2));
+            Assert.False(ReferenceEquals(computation1_1, computation2));
+            Assert.False(ReferenceEquals(computation1_2, computation2));
+            Assert.False(ReferenceEquals(computation1_3, computation2));
 
             Assert.IsType(typeof(Computation1), computation1_1);
             Assert.IsType(typeof(Computation1), computation1_2);
             Assert.IsType(typeof(Computation1), computation1_3);
             Assert.IsType(typeof(Computation2), computation2);
 
-            Assert.Equal(false, ReferenceEquals(computation1_1, computation1_2));
-            Assert.Equal(true, ReferenceEquals(computation1_1, computation1_3));
+            Assert.False(ReferenceEquals(computation1_1, computation1_2));
+            Assert.True(ReferenceEquals(computation1_1, computation1_3));
         }
+        #endregion
 
-        #region Classic Space Object Collision Example
+        #region Classic Space Object Collision Sample / Test
         /*
          * See https://en.wikipedia.org/wiki/Multiple_dispatch#Examples
          */
         [Fact]
-        public void ClassicSpaceObjectCollisionExample_CanDispatchAsExpected()
+        public void ClassicSpaceObjectCollision_CanDispatchAsExpected()
         {
             var planet1 = new Planet();
             var planet2 = new Planet();
@@ -195,6 +244,51 @@ namespace DispatchBenchmark.Tests
             Assert.Equal(satellite1.CollideWith(spaceship1), "the spaceship obliterates the satellite");
 
             Assert.Equal(satellite1.CollideWith(satellite2), "the satellites destroy each other");
+        }
+        #endregion
+
+        #region Double Dispatch Over Static Method Overloads (Several Static Classes) Sample / Test
+        [Fact]
+        public void MathV2_CanDispatchAsExpected()
+        {
+            int ainteger = MathV2.Abs(-123);
+            double adouble = MathV2.Abs(-456.0);
+            decimal adecimal = MathV2.Abs(-789m);
+
+            int[] aintegervect = MathV2.Abs(123, -456, 789);
+            double[] adoublevect = MathV2.Abs(123.0, -456.0, 789.0);
+            decimal[] adecimalvect = MathV2.Abs(123m, -456m, 789m);
+
+            Assert.Equal(123, ainteger);
+            Assert.Equal(456.0, adouble);
+            Assert.Equal(789m, adecimal);
+
+            Assert.Equal(new[] { 123, 456, 789 }, aintegervect);
+            Assert.Equal(new[] { 123.0, 456.0, 789.0 }, adoublevect);
+            Assert.Equal(new[] { 123m, 456m, 789m }, adecimalvect);
+        }
+
+        [Fact]
+        public void MathV2_ShouldThrowNotImplementedException_WhenDispatchCompletelyFails()
+        {
+            Action tryBadDoubleDispatchOverMathV2 =
+                () =>
+                {
+                    var neverSet = MathV2.Abs(new IAmNotANumber());
+                };
+
+            Exception error = null;
+            try
+            {
+                tryBadDoubleDispatchOverMathV2();
+            }
+            catch (Exception ex)
+            {
+                error = ex;
+            }
+
+            Assert.NotNull(error);
+            Assert.IsType(typeof(NotImplementedException), error);
         }
         #endregion
     }

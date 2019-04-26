@@ -101,13 +101,17 @@ namespace YSharp.Design.DoubleDispatch
         private void PopulateMultimethodMap<TBound>(IDictionary<string, IDictionary<Type, Tuple<TBound, Type>>> multimethodMap, bool forFunctionType)
         {
             ParameterInfo[] parameters;
-            Target
-            .GetType()
-            .GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
+            (
+                !(Target is Type) ?
+                Target.GetType().GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
+                :
+                ((Type)Target).GetMethods(BindingFlags.Public | BindingFlags.Static)
+            )
             .Where
             (
                 m =>
-                    (m.IsPublic || m.IsFamily || m.IsFamilyOrAssembly) &&
+                    (Target is Type ? m.IsPublic : (m.IsPublic || m.IsFamily || m.IsFamilyOrAssembly)) &&
+                    !m.IsSpecialName &&
                     (forFunctionType ? m.ReturnType != typeof(void) : m.ReturnType == typeof(void)) &&
                     (parameters = m.GetParameters()).Length == 1 &&
                     !parameters[0].ParameterType.ContainsGenericParameters &&
@@ -125,7 +129,7 @@ namespace YSharp.Design.DoubleDispatch
                 {
                     var parameterType = method.GetParameters()[0].ParameterType;
                     var returnType = method.ReturnType != typeof(void) ? method.ReturnType : null;
-                    var binder = Binder.Create<TBound>(Target, method, new[] { parameterType }, returnType);
+                    var binder = Binder.Create<TBound>(!(Target is Type) ? Target : null, method, new[] { parameterType }, returnType);
                     if (!multimethodMap.TryGetValue(method.Name, out var boundTypeMap))
                     {
                         multimethodMap.Add(method.Name, boundTypeMap = new Dictionary<Type, Tuple<TBound, Type>>());
@@ -144,7 +148,10 @@ namespace YSharp.Design.DoubleDispatch
 
         protected virtual void Initialize()
         {
-            PopulateMultimethodMap(_action1, false);
+            if (!(Target is Type))
+            {
+                PopulateMultimethodMap(_action1, false);
+            }
             PopulateMultimethodMap(_function1, true);
         }
 
@@ -204,13 +211,13 @@ namespace YSharp.Design.DoubleDispatch
         protected object Target { get; private set; }
 
         /// <summary>
-        /// Creates a surrogate of the action delegate, which enables double dispatch in the concrete type of its target
+        /// Creates a surrogate of the action, which enables double dispatch in the runtime type of its target
         /// </summary>
         public static Action<T> CreateSurrogate<T>(Action<T> action, T prototype) =>
             CreateSurrogate(action, prototype, null);
 
         /// <summary>
-        /// Creates a surrogate of the action delegate, which enables double dispatch in the concrete type of its target
+        /// Creates a surrogate of the action, which enables double dispatch in the runtime type of its target
         /// </summary>
         public static Action<T> CreateSurrogate<T>(Action<T> action, T prototype, Action orElse)
         {
@@ -225,25 +232,51 @@ namespace YSharp.Design.DoubleDispatch
         }
 
         /// <summary>
-        /// Creates a surrogate of the function delegate, which enables double dispatch in the concrete type of its target
+        /// Creates a surrogate of the type's named (static) function, which enables double dispatch in the same type
+        /// </summary>
+        public static Func<T, TResult> CreateSurrogate<T, TResult>(Type type, string functionName, T prototype, Func<TResult> orElse) =>
+            CreateSurrogate(type, functionName, prototype, orElse, default(TResult));
+
+        /// <summary>
+        /// Creates a surrogate of the type's named (static) function, which enables double dispatch in the same type
+        /// </summary>
+        public static Func<T, TResult> CreateSurrogate<T, TResult>(Type type, string functionName, T prototype, TResult defaultResult) =>
+            CreateSurrogate(type, functionName, prototype, null, defaultResult);
+
+        /// <summary>
+        /// Creates a surrogate of the type's named (static) function, which enables double dispatch in the same type
+        /// </summary>
+        public static Func<T, TResult> CreateSurrogate<T, TResult>(Type type, string functionName, T prototype, Func<TResult> orElse, TResult defaultResult)
+        {
+            type = type ?? throw new ArgumentNullException(nameof(type));
+            functionName = !string.IsNullOrEmpty(functionName) ? functionName : throw new ArgumentException("cannot be null or empty", nameof(functionName));
+            var dispatch = new DoubleDispatchObject(type);
+            Func<T, TResult> surrogate =
+                arg =>
+                    dispatch.Via(functionName, arg, orElse, defaultResult);
+            return surrogate;
+        }
+
+        /// <summary>
+        /// Creates a surrogate of the function, which enables double dispatch in the runtime type of its target
         /// </summary>
         public static Func<T, TResult> CreateSurrogate<T, TResult>(Func<T, TResult> function, T prototype) =>
             CreateSurrogate(function, prototype, null, default(TResult));
 
         /// <summary>
-        /// Creates a surrogate of the function delegate, which enables double dispatch in the concrete type of its target
+        /// Creates a surrogate of the function, which enables double dispatch in the runtime type of its target
         /// </summary>
         public static Func<T, TResult> CreateSurrogate<T, TResult>(Func<T, TResult> function, T prototype, Func<TResult> orElse) =>
             CreateSurrogate(function, prototype, orElse, default(TResult));
 
         /// <summary>
-        /// Creates a surrogate of the function delegate, which enables double dispatch in the concrete type of its target
+        /// Creates a surrogate of the function, which enables double dispatch in the runtime type of its target
         /// </summary>
         public static Func<T, TResult> CreateSurrogate<T, TResult>(Func<T, TResult> function, T prototype, TResult defaultResult) =>
             CreateSurrogate(function, prototype, null, defaultResult);
 
         /// <summary>
-        /// Creates a surrogate of the function delegate, which enables double dispatch in the concrete type of its target
+        /// Creates a surrogate of the function, which enables double dispatch in the runtime type of its target
         /// </summary>
         public static Func<T, TResult> CreateSurrogate<T, TResult>(Func<T, TResult> function, T prototype, Func<TResult> orElse, TResult defaultResult)
         {
@@ -257,17 +290,31 @@ namespace YSharp.Design.DoubleDispatch
             return surrogate;
         }
 
+        /// <summary>
+        /// Constructs a new DoubleDispatchObject instance, to enable double dispatch in this
+        /// </summary>
+        /// <param name="target"></param>
         public DoubleDispatchObject() : this(null) { }
 
+        /// <summary>
+        /// Constructs a new DoubleDispatchObject instance, to enable double dispatch in the Target
+        /// </summary>
+        /// <param name="target"></param>
         public DoubleDispatchObject(object target)
         {
             Target = target ?? this;
             Initialize();
         }
 
+        /// <summary>
+        /// Invokes the named method on the Target, with double dispatch through arg's runtime type
+        /// </summary>
         public void Via<T>(string methodName, T arg) =>
             Via(methodName, arg, null);
 
+        /// <summary>
+        /// Invokes the named method on the Target, with double dispatch through arg's runtime type
+        /// </summary>
         public void Via<T>(string methodName, T arg, Action orElse)
         {
             if (!TryInvoke(methodName, arg))
@@ -276,12 +323,21 @@ namespace YSharp.Design.DoubleDispatch
             }
         }
 
+        /// <summary>
+        /// Invokes the named method on the Target, with double dispatch through arg's runtime type
+        /// </summary>
         public TResult Via<T, TResult>(string methodName, T arg, Func<TResult> orElse) =>
             Via(methodName, arg, orElse, default(TResult));
 
+        /// <summary>
+        /// Invokes the named method on the Target, with double dispatch through arg's runtime type
+        /// </summary>
         public TResult Via<T, TResult>(string methodName, T arg, TResult defaultResult) =>
             Via(methodName, arg, null, defaultResult);
 
+        /// <summary>
+        /// Invokes the named method on the Target, with double dispatch through arg's runtime type
+        /// </summary>
         public TResult Via<T, TResult>(string methodName, T arg, Func<TResult> orElse, TResult defaultResult)
         {
             if (!TryInvoke(methodName, arg, defaultResult, out var result))
