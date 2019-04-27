@@ -183,12 +183,17 @@ namespace DispatchBenchmark.Tests
     #region Double Dispatch Through Contra-Covariant Delegate Types Parameters Sample / Test
     /*
      * Takes a domain model and transforms it into another;
-     * doesn't even know how to obtain the input model, or how to persist the resulting one
+     * doesn't know how to obtain the input model, or how to persist the resulting one
      */
     public abstract class ETLTransform<TModel>
     {
         public abstract TModel Apply(TModel model);
     }
+
+    // The driver function to be passed in the below ETLProcess<TModel>.Execute(...) method
+    public delegate bool ETLDriver<TSource, TModel, TData>(
+        ETLProcess<TModel> etl, TSource source, ETLTransform<TModel> transform, TData data
+    );
 
     /*
      * Invokes a driver function typed by a source (TSource) and a persistable representation (TData)
@@ -222,13 +227,13 @@ namespace DispatchBenchmark.Tests
         public void LogWork(string message) =>
             logger.Append(message);
 
-        public bool Execute<TSource, TData>(Func<ETLProcess<TModel>, TSource, ETLTransform<TModel>, TData, bool> process) =>
+        public bool Execute<TSource, TData>(ETLDriver<TSource, TModel, TData> driver) =>
             this.EnsureThreadSafe(ref dispatchObject) // as usual
             .Via
             (
                 nameof(Execute),
-                process,
-                (Func<bool>)(() => throw new NotImplementedException($"unsupported source ({typeof(TSource)}) &/or data ({typeof(TData)})"))
+                driver,
+                (Func<bool>)(() => throw new NotImplementedException($"unsupported source ({typeof(TSource).Name}) &/or data ({typeof(TData).Name})"))
             );
     }
 
@@ -245,17 +250,17 @@ namespace DispatchBenchmark.Tests
 
     public class ProcessXML : ETLProcess<XmlDocument>
     {
-        protected bool Execute(Func<ETLProcess<XmlDocument>, FileSystemMock, ETLTransform<XmlDocument>, MongoDBMock, bool> driver) =>
+        protected bool Execute(ETLDriver<FileSystemMock, XmlDocument, MongoDBMock> driver) =>
             driver(this, new FileSystemMock(), new TransformXML(), new MongoDBMock());
 
-        protected bool Execute(Func<ETLProcess<XmlDocument>, FileSystemMock, ETLTransform<XmlDocument>, SQLServerDBMock, bool> driver) =>
+        protected bool Execute(ETLDriver<FileSystemMock, XmlDocument, SQLServerDBMock> driver) =>
             driver(this, new FileSystemMock(), new TransformXML(), new SQLServerDBMock());
 
-        protected bool Execute(Func<ETLProcess<XmlDocument>, WebResourceMock, ETLTransform<XmlDocument>, MongoDBMock, bool> driver) =>
+        protected bool Execute(ETLDriver<WebResourceMock, XmlDocument, MongoDBMock> driver) =>
             driver(this, new WebResourceMock(), new TransformXML(), new MongoDBMock());
 
         //Missing:
-        //protected bool Execute(Func<WebResourceMock, TransformXML, SQLServerDBMock, bool> driver) =>
+        //protected bool Execute(ETLDriver<WebResourceMock, XmlDocument, SQLServerDBMock> driver) =>
         //    driver(this, new WebResourceMock(), new TransformXML(), new SQLServerDBMock());
     }
     #endregion
@@ -378,7 +383,7 @@ namespace DispatchBenchmark.Tests
         [Fact]
         public void ProcessXML_CanDispatchDriverFunctionsAsExpected()
         {
-            Func<ETLProcess<XmlDocument>, FileSystemMock, ETLTransform<XmlDocument>, MongoDBMock, bool> fromFileSystemToMongoDB =
+            ETLDriver<FileSystemMock, XmlDocument, MongoDBMock> fromFileSystem_ToXML_ToMongoDB =
                 (etl, fs, transform, mongo) =>
                 {
                     // Only this driver knows about that:
@@ -394,7 +399,7 @@ namespace DispatchBenchmark.Tests
                     return true;
                 };
 
-            Func<ETLProcess<XmlDocument>, WebResourceMock, ETLTransform<XmlDocument>, MongoDBMock, bool> fromWebToMongoDB =
+            ETLDriver<WebResourceMock, XmlDocument, MongoDBMock> fromWeb_ToXML_ToMongoDB =
                 (etl, web, transform, mongo) =>
                 {
                     // Only this driver knows about that:
@@ -406,11 +411,11 @@ namespace DispatchBenchmark.Tests
                     // Only this driver knows about that:
                     mongo.Save(result);
 
-                    etl.LogWork("ETL: Extract from web, Transform, and Load into MongoDB");
+                    etl.LogWork("ETL: Extract from web resource, Transform, and Load into MongoDB");
                     return true;
                 };
 
-            Func<ETLProcess<XmlDocument>, FileSystemMock, ETLTransform<XmlDocument>, SQLServerDBMock, bool> fromFileSystemToSQLServer =
+            ETLDriver<FileSystemMock, XmlDocument, SQLServerDBMock> fromFileSystem_ToXML_ToSQLServer =
                 (etl, fs, transform, sql) =>
                 {
                     // Only this driver knows about that:
@@ -427,17 +432,62 @@ namespace DispatchBenchmark.Tests
                 };
 
             var etlProcess1 = new ProcessXML();
-            etlProcess1.Execute(fromFileSystemToMongoDB);
+            var outcome1 = etlProcess1.Execute(fromFileSystem_ToXML_ToMongoDB);
 
             var etlProcess2 = new ProcessXML();
-            etlProcess2.Execute(fromWebToMongoDB);
+            var outcome2 = etlProcess2.Execute(fromWeb_ToXML_ToMongoDB);
 
             var etlProcess3 = new ProcessXML();
-            etlProcess3.Execute(fromFileSystemToSQLServer);
+            var outcome3 = etlProcess3.Execute(fromFileSystem_ToXML_ToSQLServer);
 
+            Assert.True(outcome1);
             Assert.Equal("ETL: Extract from file system, Transform, and Load into MongoDB", $"{etlProcess1}");
-            Assert.Equal("ETL: Extract from web, Transform, and Load into MongoDB", $"{etlProcess2}");
+
+            Assert.True(outcome2);
+            Assert.Equal("ETL: Extract from web resource, Transform, and Load into MongoDB", $"{etlProcess2}");
+
+            Assert.True(outcome3);
             Assert.Equal("ETL: Extract from file system, Transform, and Load into SQLServer", $"{etlProcess3}");
+        }
+
+        [Fact]
+        public void ProcessXML_ShouldThrowNotImplementedException_WhenDispatchCompletelyFails()
+        {
+            ETLDriver<WebResourceMock, XmlDocument, SQLServerDBMock> fromWebResource_ToXML_ToSQLServer =
+                (etl, web, transform, sql) =>
+                {
+                    // Only this driver knows about that:
+                    var input = web.GetXmlResponse();
+
+                    // Common to all ETL processes:
+                    var result = transform.Apply(input);
+
+                    // Only this driver knows about that:
+                    sql.BulkInsert(result);
+
+                    etl.LogWork("ETL: Extract from web resource, Transform, and Load into SQLServer");
+                    return true;
+                };
+
+            Action tryBadDoubleDispatchOverProcessXML =
+                () =>
+                {
+                    var neverSet = new ProcessXML().Execute(fromWebResource_ToXML_ToSQLServer);
+                };
+
+            Exception error = null;
+            try
+            {
+                tryBadDoubleDispatchOverProcessXML();
+            }
+            catch (Exception ex)
+            {
+                error = ex;
+            }
+
+            Assert.NotNull(error);
+            Assert.IsType(typeof(NotImplementedException), error);
+            Assert.Equal("unsupported source (WebResourceMock) &/or data (SQLServerDBMock)", error.Message);
         }
         #endregion
     }
