@@ -9,10 +9,10 @@ namespace DispatchBenchmark
 
     public partial class DispatchBenchmark
     {
-        private DoubleDispatchObject dispatchObject;
+        private DoubleDispatchObject dispatch;
 
         public string Describe(Shape shape) =>
-            this.EnsureThreadSafe(ref dispatchObject)
+            this.EnsureThreadSafe(ref dispatch)
             .Via(nameof(Describe), shape, () => default(string) ?? throw new Exception("Unexpected shape"));
 
         [Benchmark]
