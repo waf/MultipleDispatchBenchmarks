@@ -155,13 +155,32 @@ namespace YSharp.Design.DoubleDispatch
             PopulateMultimethodMap(_function1, true);
         }
 
-        protected virtual bool TryBindAction1(string methodName, Type argType, out Action<object> bound)
+        protected virtual bool TryBindAction1(string methodName, Type argType, Type viaType, out Action<object> bound)
         {
             methodName = !string.IsNullOrEmpty(methodName) ? methodName : throw new ArgumentException("cannot be null or empty", nameof(methodName));
             bound = null;
             if (_action1.TryGetValue(methodName, out var boundTypeMap))
             {
-                if (boundTypeMap.TryGetValue(argType, out var tuple))
+                Tuple<Action<object>, Type> tuple = null;
+                if (argType.IsClass)
+                {
+                    // If no exact match for argType, walk down its bases (as a class type),
+                    // until we find one that is assignment-compatible with our initial argType
+                    while (((argType != viaType) || ForSurrogate) && !boundTypeMap.TryGetValue(argType, out tuple) && (argType != typeof(object)))
+                    {
+                        argType = argType.BaseType;
+                    }
+                }
+                else
+                {
+                    if (((argType != viaType) || ForSurrogate) && !boundTypeMap.TryGetValue(argType, out tuple) && argType.IsValueType)
+                    {
+                        // Special handling of value type argument:
+                        // couldn't bind with argType, so try to bind with System.Object
+                        boundTypeMap.TryGetValue(typeof(object), out tuple);
+                    }
+                }
+                if (tuple != null)
                 {
                     bound = tuple.Item1;
                     return true;
@@ -173,7 +192,7 @@ namespace YSharp.Design.DoubleDispatch
         protected virtual bool TryInvoke<T>(string methodName, T arg)
         {
             var type = arg?.GetType();
-            if ((type != null) && TryBindAction1(methodName, type, out var bound))
+            if ((type != null) && TryBindAction1(methodName, type, !type.IsValueType && !typeof(Delegate).IsAssignableFrom(type) ? typeof(T) : null, out var bound))
             {
                 bound(arg);
                 return true;
@@ -181,13 +200,36 @@ namespace YSharp.Design.DoubleDispatch
             return false;
         }
 
-        protected virtual bool TryBindFunc1(string methodName, Type argType, Type returnType, out Func<object, object> bound)
+        protected virtual bool TryBindFunc1(string methodName, Type argType, Type returnType, Type viaType, out Func<object, object> bound)
         {
             methodName = !string.IsNullOrEmpty(methodName) ? methodName : throw new ArgumentException("cannot be null or empty", nameof(methodName));
             bound = null;
             if (_function1.TryGetValue(methodName, out var boundTypeMap))
             {
-                if (boundTypeMap.TryGetValue(argType, out var tuple) && CovarianceCheck(returnType, tuple.Item2))
+                Tuple<Func<object, object>, Type> tuple = null;
+                if (argType.IsClass)
+                {
+                    // If no exact match for argType, walk down its bases (as a class type),
+                    // until we find one that is assignment-compatible with our initial argType
+                    while (((argType != viaType) || ForSurrogate) && !(boundTypeMap.TryGetValue(argType, out tuple) && CovarianceCheck(returnType, tuple.Item2)) && (argType != typeof(object)))
+                    {
+                        argType = argType.BaseType;
+                    }
+                }
+                else
+                {
+                    if (((argType != viaType) || ForSurrogate) && !(boundTypeMap.TryGetValue(argType, out tuple) && CovarianceCheck(returnType, tuple.Item2)) && argType.IsValueType)
+                    {
+                        // Special handling of value type argument:
+                        // couldn't bind with argType, so try to bind with System.Object
+                        if (boundTypeMap.TryGetValue(typeof(object), out tuple) && !CovarianceCheck(returnType, tuple.Item2))
+                        {
+                            // Could eventually bind with System.Object, but covariance check failed, so back off
+                            tuple = null;
+                        }
+                    }
+                }
+                if (tuple != null)
                 {
                     bound = tuple.Item1;
                     return true;
@@ -200,7 +242,7 @@ namespace YSharp.Design.DoubleDispatch
         {
             var type = arg?.GetType();
             result = defaultResult;
-            if ((type != null) && TryBindFunc1(methodName, type, typeof(TResult), out var bound))
+            if ((type != null) && TryBindFunc1(methodName, type, typeof(TResult), !type.IsValueType && !typeof(Delegate).IsAssignableFrom(type) ? typeof(T) : null, out var bound))
             {
                 result = (TResult)bound(arg);
                 return true;
@@ -209,6 +251,8 @@ namespace YSharp.Design.DoubleDispatch
         }
 
         protected object Target { get; private set; }
+
+        protected bool ForSurrogate { get; private set; }
 
         /// <summary>
         /// Creates a surrogate of the action, which enables double dispatch in the runtime type of its target
@@ -223,7 +267,7 @@ namespace YSharp.Design.DoubleDispatch
         {
             action = action ?? throw new ArgumentNullException(nameof(action));
             var target = action.Target ?? throw new ArgumentException("must be bound", nameof(action));
-            var dispatch = new DoubleDispatchObject(target);
+            var dispatch = new DoubleDispatchObject(target, true);
             var methodName = action.GetMethodInfo().Name;
             Action<T> surrogate =
                 arg =>
@@ -250,7 +294,7 @@ namespace YSharp.Design.DoubleDispatch
         {
             type = type ?? throw new ArgumentNullException(nameof(type));
             functionName = !string.IsNullOrEmpty(functionName) ? functionName : throw new ArgumentException("cannot be null or empty", nameof(functionName));
-            var dispatch = new DoubleDispatchObject(type);
+            var dispatch = new DoubleDispatchObject(type, true);
             Func<T, TResult> surrogate =
                 arg =>
                     dispatch.Via(functionName, arg, orElse, defaultResult);
@@ -282,7 +326,7 @@ namespace YSharp.Design.DoubleDispatch
         {
             function = function ?? throw new ArgumentNullException(nameof(function));
             var target = function.Target ?? throw new ArgumentException("must be bound", nameof(function));
-            var dispatch = new DoubleDispatchObject(target);
+            var dispatch = new DoubleDispatchObject(target, true);
             var methodName = function.GetMethodInfo().Name;
             Func<T, TResult> surrogate =
                 arg =>
@@ -293,16 +337,20 @@ namespace YSharp.Design.DoubleDispatch
         /// <summary>
         /// Constructs a new DoubleDispatchObject instance, to enable double dispatch in this
         /// </summary>
-        /// <param name="target"></param>
         public DoubleDispatchObject() : this(null) { }
 
         /// <summary>
         /// Constructs a new DoubleDispatchObject instance, to enable double dispatch in the Target
         /// </summary>
-        /// <param name="target"></param>
-        public DoubleDispatchObject(object target)
+        public DoubleDispatchObject(object target) : this(target, false) { }
+
+        /// <summary>
+        /// Constructs a new DoubleDispatchObject instance, to enable double dispatch in the Target
+        /// </summary>
+        public DoubleDispatchObject(object target, bool forSurrogate)
         {
             Target = target ?? this;
+            ForSurrogate = forSurrogate;
             Initialize();
         }
 

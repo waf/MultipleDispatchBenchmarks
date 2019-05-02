@@ -22,6 +22,7 @@ namespace DispatchBenchmark.Tests
         public class POCOItem : POCOEntity { protected POCOItem(string id) : base(id) { } }
         public class POCOFile : POCOItem { public POCOFile(string id) : base(id) { } }
         public class POCOLink : POCOItem { public POCOLink(string id) : base(id) { } }
+        public class POCOSymLink : POCOItem { public POCOSymLink(string id) : base(id) { } }
         public class POCOFolder : POCOEntity { public POCOFolder(string id) : base(id) { } }
         public class POCOUnsupported : POCOEntity { public POCOUnsupported(string id) : base(id) { } }
 
@@ -61,12 +62,12 @@ namespace DispatchBenchmark.Tests
 
             public override void Handle(POCOFile file)
             {
-                accumulator.AppendLine($"item: {file}");
+                accumulator.AppendLine($"file: {file}");
             }
 
             public void Handle(POCOLink link)
             {
-                accumulator.AppendLine($"item: {link}");
+                accumulator.AppendLine($"link: {link}");
             }
 
             public void Handle(POCOFolder folder)
@@ -93,17 +94,22 @@ namespace DispatchBenchmark.Tests
 
             public void Handle(POCOFile file)
             {
-                accumulator.AppendLine($"item: {file}");
+                accumulator.AppendLine($"file: {file}");
             }
 
             public void Handle(POCOLink link)
             {
-                accumulator.AppendLine($"item: {link}");
+                accumulator.AppendLine($"link: {link}");
             }
 
             public void Handle(POCOFolder folder)
             {
                 accumulator.AppendLine($"folder: {folder}");
+            }
+
+            public void Handle(POCOItem item)
+            {
+                accumulator.AppendLine($"item: {item}");
             }
         }
 
@@ -193,12 +199,12 @@ namespace DispatchBenchmark.Tests
             Assert.Equal(5, lines.Count);
             Assert.Equal
             (
-                new string[]
+                new[]
                 {
-                    "item: POCOFile(file1)",
-                    "item: POCOLink(link1)",
+                    "file: POCOFile(file1)",
+                    "link: POCOLink(link1)",
                     "folder: POCOFolder(folder1)",
-                    "item: POCOFile(file2)",
+                    "file: POCOFile(file2)",
                     "folder: POCOFolder(folder2)"
                 },
                 lines.ToArray()
@@ -233,16 +239,37 @@ namespace DispatchBenchmark.Tests
             Assert.Equal(5, lines.Count);
             Assert.Equal
             (
-                new string[]
+                new[]
                 {
-                    "item: POCOFile(file1)",
-                    "item: POCOLink(link1)",
+                    "file: POCOFile(file1)",
+                    "link: POCOLink(link1)",
                     "folder: POCOFolder(folder1)",
-                    "item: POCOFile(file2)",
+                    "file: POCOFile(file2)",
                     "folder: POCOFolder(folder2)"
                 },
                 lines.ToArray()
             );
+        }
+
+        [Fact]
+        public void DoubleDispatchObject_CanDispatch_ToOverloadWithBaseClassTypeOfTheArgument()
+        {
+            var service = new ServiceV2();
+
+            POCOEntity entity = new POCOSymLink("shortcut1");
+            service.Handle(entity);
+
+            var serviceText = service.ToString();
+            var reader = new StringReader(serviceText);
+            var lines = new List<string>();
+            string line;
+            while ((line = reader.ReadLine()) != null)
+            {
+                lines.Add(line);
+            }
+
+            Assert.Equal(1, lines.Count);
+            Assert.Equal(new[] { "item: POCOSymLink(shortcut1)" }, lines.ToArray());
         }
 
         [Fact]
@@ -266,7 +293,7 @@ namespace DispatchBenchmark.Tests
             Assert.Equal(2, lines.Count);
             Assert.Equal
             (
-                new string[]
+                new[]
                 {
                     "unsupported entity: <null>",
                     "unsupported entity: POCOUnsupported(oops)"
@@ -308,13 +335,75 @@ namespace DispatchBenchmark.Tests
             Assert.Equal(2, lines.Count);
             Assert.Equal
             (
-                new string[]
+                new[]
                 {
                     "item: POCOFile(file1)",
                     "item: POCOFile(file2)"
                 },
                 lines.ToArray()
             );
+        }
+
+        public class SampleClass
+        {
+            // Best instance overload for int-to-(boxed) int expectation
+            public object GetValue(int value) =>
+                value;
+
+            // Best instance overload for SampleClass-to-decimal expectation
+            public decimal GetValue(SampleClass instance) =>
+                Convert.ToDecimal(instance.NumberOfQuarters) / 4;
+
+            // Best instance overload for double-to-decimal expectation
+            public decimal GetValue(object value) =>
+                Convert.ToDecimal((double)value);
+
+            // Best static overload for int-to-(boxed) int expectation
+            public static object StaticGetValue(int value) =>
+                value;
+
+            // Best static overload for SampleClass-to-decimal expectation
+            public static decimal StaticGetValue(SampleClass instance) =>
+                Convert.ToDecimal(instance.NumberOfQuarters) / 4;
+
+            // Best static overload for double-to-decimal expectation
+            public static decimal StaticGetValue(object value) =>
+                Convert.ToDecimal((double)value);
+
+            public int NumberOfQuarters { get; set; }
+        }
+
+        [Fact]
+        public void Surrogate_CanDispatch_ToOverloadsWithBaseClassTypesOfArgumentAndHonorContraCovariance()
+        {
+            // Instance method surrogates
+            var sample = new SampleClass { NumberOfQuarters = 6 };
+
+            var someCount = sample.SurrogateInvoke(sample.GetValue, 123);
+            Assert.Equal(123, someCount);
+
+            var someDollarAmount = sample.SurrogateInvoke(sample.GetValue, sample);
+            Assert.Equal(1.5m, someDollarAmount);
+
+            var anotherAmount = sample.SurrogateInvoke(sample.GetValue, (object)4.5, default(decimal));
+            Assert.Equal(4.5m, anotherAmount);
+
+            // Static method surrogates
+            var someCount2 = default(object).SurrogateInvoke(typeof(SampleClass), nameof(SampleClass.StaticGetValue), 123);
+            Assert.Equal(123, someCount2);
+
+            var someDollarAmount2 =
+                default(decimal)
+                .SurrogateInvoke
+                (
+                    typeof(SampleClass),
+                    nameof(SampleClass.StaticGetValue),
+                    new SampleClass { NumberOfQuarters = 6 }
+                );
+            Assert.Equal(1.5m, someDollarAmount2);
+
+            var anotherAmount2 = default(decimal).SurrogateInvoke(typeof(SampleClass), nameof(SampleClass.StaticGetValue), 4.5);
+            Assert.Equal(4.5m, anotherAmount2);
         }
 
         [Fact]
