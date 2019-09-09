@@ -49,7 +49,7 @@ namespace DispatchBenchmark.Tests
         private MemoizingDispatchObject dispatchObject;
 
         public Computation Match(Pattern pattern) =>
-            this.EnsureThreadSafe(ref dispatchObject, target => new MemoizingDispatchObject(target))
+            this.EnsureThreadSafe(ref dispatchObject, () => new MemoizingDispatchObject(this))
             .Via(nameof(Match), pattern, default(Computation));
 
         public Computation1 Match(Pattern1 pattern) =>

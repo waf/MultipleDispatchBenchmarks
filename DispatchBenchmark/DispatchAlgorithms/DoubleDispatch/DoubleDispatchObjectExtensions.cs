@@ -1,20 +1,24 @@
-﻿using System;
+using System;
+using System.Threading;
 
 namespace YSharp.Design.DoubleDispatch.Extensions
 {
     public static class DoubleDispatchObjectExtensions
     {
         public static DoubleDispatchObject EnsureThreadSafe(this object target, ref DoubleDispatchObject dispatchObject) =>
-            EnsureThreadSafe(target, ref dispatchObject, obj => new DoubleDispatchObject(obj));
+            EnsureThreadSafe(target, ref dispatchObject, () => new DoubleDispatchObject(target));
 
-        public static DoubleDispatchObject EnsureThreadSafe<TDispatch>(this object target, ref TDispatch dispatchObject, Func<object, TDispatch> createDispatchObject)
+        public static DoubleDispatchObject EnsureThreadSafe<TDispatch>(this object target, ref TDispatch dispatchObject, Func<TDispatch> createDispatchObject)
             where TDispatch : DoubleDispatchObject
         {
             target = target ?? throw new ArgumentNullException(nameof(target));
             createDispatchObject = createDispatchObject ?? throw new ArgumentNullException(nameof(createDispatchObject));
-            if (dispatchObject == null)
+            lock (target)
             {
-                System.Threading.Interlocked.CompareExchange(ref dispatchObject, createDispatchObject(target) ?? throw new InvalidOperationException(), null);
+                if (dispatchObject == null)
+                {
+                    dispatchObject = createDispatchObject();
+                }
             }
             return dispatchObject;
         }
