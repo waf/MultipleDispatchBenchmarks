@@ -52,7 +52,7 @@ namespace DispatchBenchmark.Tests
             private DoubleDispatchObject dispatch;
 
             public override void Handle(POCOEntity entity) =>
-                this.EnsureThreadSafe(ref dispatch)
+                this.SingleThreaded(ref dispatch)
                 .Via(nameof(Handle), entity,
                     () =>
                     {

@@ -49,7 +49,7 @@ namespace DispatchBenchmark.Tests
         private MemoizingDispatchObject dispatchObject;
 
         public Computation Match(Pattern pattern) =>
-            this.EnsureThreadSafe(ref dispatchObject, () => new MemoizingDispatchObject(this))
+            this.MultiThreaded(ref dispatchObject, () => new MemoizingDispatchObject(this))
             .Via(nameof(Match), pattern, default(Computation));
 
         public Computation1 Match(Pattern1 pattern) =>
@@ -69,7 +69,7 @@ namespace DispatchBenchmark.Tests
         private DoubleDispatchObject dispatch;
 
         public string CollideWith(SpaceObject other) =>
-            this.EnsureThreadSafe(ref dispatch)
+            this.SingleThreaded(ref dispatch)
             .Via(nameof(CollideWith), other, () => default(string) ?? throw new NotImplementedException());
     }
 
@@ -173,7 +173,7 @@ namespace DispatchBenchmark.Tests
             .Select
             (
                 number =>
-                    typeof(MathV2).EnsureThreadSafe(ref dispatch) // as usual
+                    typeof(MathV2).SingleThreaded(ref dispatch) // as usual
                     .Via(nameof(Math.Abs), number, MathAbs(number)/* <- Same default as the above */)
             )
             .ToArray();
@@ -226,7 +226,7 @@ namespace DispatchBenchmark.Tests
         /// and how to call TData to persist the transform's resulting TModel
         /// </summary>
         public bool Execute<TSource, TData>(ETLDriver<TSource, TModel, TData> driver) =>
-            this.EnsureThreadSafe(ref dispatch) // as usual
+            this.SingleThreaded(ref dispatch) // as usual
             .Via
             (
                 nameof(Execute),

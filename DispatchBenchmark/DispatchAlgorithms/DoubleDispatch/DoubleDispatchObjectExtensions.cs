@@ -5,10 +5,21 @@ namespace YSharp.Design.DoubleDispatch.Extensions
 {
     public static class DoubleDispatchObjectExtensions
     {
-        public static DoubleDispatchObject EnsureThreadSafe(this object target, ref DoubleDispatchObject dispatchObject) =>
-            EnsureThreadSafe(target, ref dispatchObject, () => new DoubleDispatchObject(target));
+        public static DoubleDispatchObject SingleThreaded(this object target, ref DoubleDispatchObject dispatchObject) =>
+            SingleThreaded(target, ref dispatchObject, () => new DoubleDispatchObject(target));
 
-        public static DoubleDispatchObject EnsureThreadSafe<TDispatch>(this object target, ref TDispatch dispatchObject, Func<TDispatch> createDispatchObject)
+        public static DoubleDispatchObject SingleThreaded<TDispatch>(this object target, ref TDispatch dispatchObject, Func<TDispatch> createDispatchObject)
+            where TDispatch : DoubleDispatchObject
+        {
+            target = target ?? throw new ArgumentNullException(nameof(target));
+            createDispatchObject = createDispatchObject ?? throw new ArgumentNullException(nameof(createDispatchObject));
+            return dispatchObject = dispatchObject ?? createDispatchObject();
+        }
+
+        public static DoubleDispatchObject MultiThreaded(this object target, ref DoubleDispatchObject dispatchObject) =>
+            MultiThreaded(target, ref dispatchObject, () => new DoubleDispatchObject(target));
+
+        public static DoubleDispatchObject MultiThreaded<TDispatch>(this object target, ref TDispatch dispatchObject, Func<TDispatch> createDispatchObject)
             where TDispatch : DoubleDispatchObject
         {
             target = target ?? throw new ArgumentNullException(nameof(target));
